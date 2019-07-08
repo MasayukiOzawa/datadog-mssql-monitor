@@ -1,2 +1,8 @@
-./lib/YamlDotNet.dll
+# Azure Functions artifacts
+bin
+obj
+appsettings.json
+local.settings.json
 env.ps1
+YamlDotNet.dll
+launch.json
