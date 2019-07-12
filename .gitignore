@@ -4,5 +4,4 @@ obj
 appsettings.json
 local.settings.json
 env.ps1
-YamlDotNet.dll
 launch.json
