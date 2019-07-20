@@ -6,16 +6,16 @@ using namespace System.Collections.Generic;
 param($Timer)
 
 # Wait-Debugger
-Write-Host "Start."
 $ErrorActionPreference = "Stop"
 Add-Type -Path "./lib/YamlDotNet.dll"
 
-$conString = ("Data Source={0};Initial Catalog={1};User Id={2};Password={3}" -f $ENV:MSSQL_SERVER_NAME, $ENV:MSSQL_DATABASE_NAME, $ENV:MSSQL_USER_ID, $ENV:MSSQL_USER_PASSWORD)
 $apiKey = $ENV:DATADOG_APIKEY
 $runspaceSize = 5
 
 $confPath = "./conf.d\*.yaml"
 $confFiles = Get-ChildItem -Path $confPath
+
+#region
 function Test-EnvironmentVariable() {
     param(
         $MssqlConnectionString,
@@ -78,11 +78,11 @@ function Send-DatadogMetrics() {
     param(
         $confFile,
         $conString,
-        $apiKey
-
+        $apiKey,
+        $server
     )
     $ErrorActionPreference = "Stop"
-    $hostName = $ENV:MSSQL_SERVER_NAME
+    $hostName = $server
     $postURI = ("https://api.datadoghq.com/api/v1/series?api_key={0}" -f $apiKey, $appKey)
 
     $body_root = @"
@@ -100,7 +100,7 @@ function Send-DatadogMetrics() {
         "points":[[{1}, {2}]],
         "type":"gauge",
         "host":"{3}",
-        "tags":[{4}]
+        "tags":[{4},{5}]
     }}
 "@
     
@@ -110,7 +110,6 @@ function Send-DatadogMetrics() {
     $con = New-Object System.Data.SqlClient.SqlConnection
     $con.ConnectionString = $conString
     $con.Open()
-
     $cmd = $con.CreateCommand()
     $cmd.CommandText = $conf.monitor_sql
     $da = New-Object System.Data.SqlClient.SqlDataAdapter
@@ -124,7 +123,9 @@ function Send-DatadogMetrics() {
     
     foreach ($row in $dt.rows) {
         if ($null -ne $row.dd_tags) {
-            $dd_tags += (", ""{0}""" -f $row.dd_tags)
+            foreach($dd_tag in ($row.dd_tags -split ",")){
+                $dd_tags += (", ""{0}""" -f $dd_tag)
+            }
         }
         foreach ($col in $row.Table.Columns) {
             if (!([System.String]::IsNullOrEmpty($body_detail))) {
@@ -135,7 +136,9 @@ function Send-DatadogMetrics() {
                 $postTime, 
                 $row.$col,
                 $hostName,
-                $dd_tags)
+                $dd_tags,
+                ("""database:{0}""" -f $con.Database)
+                )
         }
     
     }
@@ -159,52 +162,86 @@ function Send-DatadogMetrics() {
         Out-Message -Message  ("Metric [{0}] Send Error. (Exception : {1})" -f $conf.metrics_name, $error[0].Exception.Message) -ErrorInfo $true
     }
 }
+#endregion
+Out-Message -Message ("Metrics collecting start." -f  $mssql_server_name)
+$servers = $ENV:MSSQL_SERVER_NAME -split ","
 
-Test-EnvironmentVariable -MssqlConnectionString $conString -DatadogAPIKey $ENV:DATADOG_APIKEY
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
 
-if ($ENV:RUNNING_MODE -eq "parallel") {
-    $initialSessionState = [initialsessionstate]::CreateDefault()
-    $initialSessionState.Commands.Add((New-Object System.Management.Automation.Runspaces.SessionStateFunctionEntry(
-                "Read-YamlConfig", 
-                ${function:Read-YamlConfig} 
-            )))
-    $initialSessionState.Commands.Add((New-Object System.Management.Automation.Runspaces.SessionStateFunctionEntry(
-                "Out-Message", 
-                ${function:Out-Message} 
-            )))
-    $minPoolSize = $maxPoolSize = $runspaceSize
-    $runspacePool = [runspacefactory]::CreateRunspacePool($minPoolSize, $maxPoolSize, $initialSessionState, $Host)
-    $runspacePool.Open()
-    $runspaceCollection = New-Object 'List[pscustomobject]'
-    foreach ($confFile in $confFiles) {
-        $posh = [powershell]::Create().AddScript(${function:Send-DatadogMetrics}).`
-            AddArgument($confFile).`
-            AddArgument($conString).`
-            AddArgument($apiKey)
-        $posh.RunspacePool = $runspacePool
-        $runspaceCollection.Add(
-            [PSCustomObject]@{
-                confFile = $confFile
-                runspace = $posh.BeginInvoke()
-                posh     = $posh
-            }
-        )
-    }
-    while ($runspaceCollection) {
-        foreach ($runspace in $runspaceCollection) {
-            if ($runspace.Runspace.IsCompleted) {
-                $ret = $runspace.posh.EndInvoke($runspace.runspace)
-                [void]$runspaceCollection.Remove($runspace)
-                break
-            }
+foreach($server in $servers){
+    $sub_sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $mssql_server_name = ($server -split ";")[0]
+    $mssql_database_name = &{
+        if([String]::IsNullOrEmpty($server -split ";")[1]){
+            Write-Output $ENV:MSSQL_DATABASE_NAME
+        }else{
+            Write-Output ($server -split ";")[1]
         }
-        start-sleep -Milliseconds 100
     }
-    $runspacePool.Close()
-    $runspacePool.Dispose()
-}
-else {
-    foreach ($confFile in $confFiles) {
-        Send-DatadogMetrics -confFile $confFile -conString $conString -apiKey $apiKey
+
+    Out-Message -Message ("Server [{0}] metrics collecting start." -f $server)
+
+    $conString = ("Data Source={0};Initial Catalog={1};User Id={2};Password={3}" -f $mssql_server_name, $mssql_database_name, $ENV:MSSQL_USER_ID, $ENV:MSSQL_USER_PASSWORD)
+    Test-EnvironmentVariable -MssqlConnectionString $conString -DatadogAPIKey $ENV:DATADOG_APIKEY
+
+    if ($ENV:RUNNING_MODE -eq "parallel") {
+        # Create RunspacePool
+        $initialSessionState = [initialsessionstate]::CreateDefault()
+        $initialSessionState.Commands.Add((New-Object System.Management.Automation.Runspaces.SessionStateFunctionEntry(
+                    "Read-YamlConfig", 
+                    ${function:Read-YamlConfig} 
+                )))
+        $initialSessionState.Commands.Add((New-Object System.Management.Automation.Runspaces.SessionStateFunctionEntry(
+                    "Out-Message", 
+                    ${function:Out-Message} 
+                )))
+        $minPoolSize = $maxPoolSize = $runspaceSize
+        $runspacePool = [runspacefactory]::CreateRunspacePool($minPoolSize, $maxPoolSize, $initialSessionState, $Host)
+        $runspacePool.Open()
+        $runspaceCollection = New-Object 'List[pscustomobject]'
+
+        # Get metrics
+        foreach ($confFile in $confFiles) {
+            $posh = [powershell]::Create().AddScript(${function:Send-DatadogMetrics}).`
+                AddArgument($confFile).`
+                AddArgument($conString).`
+                AddArgument($apiKey).`
+                AddArgument($mssql_server_name)
+            $posh.RunspacePool = $runspacePool
+            $runspaceCollection.Add(
+                [PSCustomObject]@{
+                    confFile = $confFile
+                    runspace = $posh.BeginInvoke()
+                    posh     = $posh
+                }
+            )
+        }
+
+        # Get Results
+        while ($runspaceCollection) {
+            foreach ($runspace in $runspaceCollection) {
+                if ($runspace.Runspace.IsCompleted) {
+                    $ret = $runspace.posh.EndInvoke($runspace.runspace)
+                    [void]$runspaceCollection.Remove($runspace)
+                    break
+                }
+            }
+            start-sleep -Milliseconds 100
+        }
+        $runspacePool.Close()
+        $runspacePool.Dispose()
     }
+    else {
+        foreach ($confFile in $confFiles) {
+            Send-DatadogMetrics -confFile $confFile -conString $conString -apiKey $apiKey -server $mssql_server_name
+        }
+    }
+    Out-Message -Message ("Server [{0}] metrics collecting end." -f $server)
+    $sub_sw.Stop()
+    Out-Message -Message ("Server [{0}] processing time {1} msec." -f  $server, ($sub_sw.ElapsedMilliseconds).ToString("#,##0"))
 }
+
+Out-Message -Message ("Metrics collecting End." -f  $mssql_server_name)
+$sw.Stop()
+Out-Message -Message ("Processing time {0} msec." -f  ($sw.ElapsedMilliseconds).ToString("#,##0"))
+

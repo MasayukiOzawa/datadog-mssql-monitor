@@ -1,0 +1,14 @@
+metrics_name: sql_server.custom.rbpio
+monitor_sql: |
+    select 'file_id:' + CAST(file_id AS varchar(3)) AS dd_tags, 
+    num_of_bytes_read,
+    num_of_reads,
+    num_of_bytes_written,
+    num_of_writes
+    from  sys.dm_io_virtual_file_stats(NULL, NULL) 
+    WHERE database_id IN (0, DB_ID())
+    OPTION (RECOMPILE, MAXDOP 1)
+dd_tags:
+    env: prd
+    tool: datadog_mssql_monitor
+    rdbms: sqlserver

@@ -1,10 +1,9 @@
 {
   "IsEncrypted": false,
   "Values": {
-    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "FUNCTIONS_WORKER_RUNTIME": "powershell",
-    "MSSQL_SERVER_NAME": "Your SQL Server Name",
-    "MSSQL_DATABASE_NAME": "Database Name",
+    "MSSQL_SERVER_NAME": "Your SQL Server Name;Database Name (Target multiple servers separated by commas ex: MySQLServer;DB1, MySQLServer2)",
+    "MSSQL_DATABASE_NAME": "Database Name (This item is used when MSSQ_SERVER_NAME Database Name is omitted.)", 
     "MSSQL_USER_ID": "Login Name",
     "MSSQL_USER_PASSWORD": "Login Password",
     "DATADOG_APIKEY": "Your Datadog API Key",

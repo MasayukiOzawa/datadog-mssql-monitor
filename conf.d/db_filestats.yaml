@@ -1,7 +1,7 @@
 metrics_name: sql_server.custom.db_file_stats
 monitor_sql: |
     SELECT
-        'db:' + COALESCE(DB_NAME(fs.database_id), CAST(database_id as varchar(100))) + ',file_id:' + CAST(fs.file_id AS varchar(3)) AS dd_tags,
+        'db:' + COALESCE(DB_NAME(fs.database_id), CAST(database_id as varchar(100))) + ':file_id:' + CAST(fs.file_id AS varchar(3)) AS dd_tags,
         fs.num_of_reads,
         fs.io_stall_read_ms,
         fs.num_of_bytes_read, 
