@@ -5,6 +5,11 @@ using namespace System.Collections.Generic;
 
 param($Timer)
 
+
+if ($PSVersionTable.PSVersion.Major -le 5){
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+}
+
 # Wait-Debugger
 $ErrorActionPreference = "Stop"
 Add-Type -Path "./lib/YamlDotNet.dll"
