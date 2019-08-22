@@ -6,7 +6,7 @@ using namespace System.Collections.Generic;
 param($Timer)
 
 
-if ($PSVersionTable.PSVersion.Major -le 5){
+if ($PSVersionTable.PSVersion.Major -le 5) {
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 }
 
@@ -124,11 +124,11 @@ function Send-DatadogMetrics() {
         
     $body_detail = ""
     $dd_tags = $conf.dd_tags
-    $postTime = (Get-Date -UFormat %s)
+    $postTime = (Get-Date -Date ((Get-Date).ToUniversalTime()) -UFormat %s)
     
     foreach ($row in $dt.rows) {
         if ($null -ne $row.dd_tags) {
-            foreach($dd_tag in ($row.dd_tags -split ",")){
+            foreach ($dd_tag in ($row.dd_tags -split ",")) {
                 $dd_tags += (", ""{0}""" -f $dd_tag)
             }
         }
@@ -143,7 +143,7 @@ function Send-DatadogMetrics() {
                 $hostName,
                 $dd_tags,
                 ("""database:{0}""" -f $con.Database)
-                )
+            )
         }
     
     }
@@ -168,18 +168,19 @@ function Send-DatadogMetrics() {
     }
 }
 #endregion
-Out-Message -Message ("Metrics collecting start." -f  $mssql_server_name)
+Out-Message -Message ("Metrics collecting start." -f $mssql_server_name)
 $servers = $ENV:MSSQL_SERVER_NAME -split ","
 
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
-foreach($server in $servers){
+foreach ($server in $servers) {
     $sub_sw = [System.Diagnostics.Stopwatch]::StartNew()
     $mssql_server_name = ($server -split ";")[0]
-    $mssql_database_name = &{
-        if([String]::IsNullOrEmpty($server -split ";")[1]){
+    $mssql_database_name = & {
+        if ([String]::IsNullOrEmpty($server -split ";")[1]) {
             Write-Output $ENV:MSSQL_DATABASE_NAME
-        }else{
+        }
+        else {
             Write-Output ($server -split ";")[1]
         }
     }
@@ -243,10 +244,10 @@ foreach($server in $servers){
     }
     Out-Message -Message ("Server [{0}] metrics collecting end." -f $server)
     $sub_sw.Stop()
-    Out-Message -Message ("Server [{0}] processing time {1} msec." -f  $server, ($sub_sw.ElapsedMilliseconds).ToString("#,##0"))
+    Out-Message -Message ("Server [{0}] processing time {1} msec." -f $server, ($sub_sw.ElapsedMilliseconds).ToString("#,##0"))
 }
 
-Out-Message -Message ("Metrics collecting End." -f  $mssql_server_name)
+Out-Message -Message ("Metrics collecting End." -f $mssql_server_name)
 $sw.Stop()
-Out-Message -Message ("Processing time {0} msec." -f  ($sw.ElapsedMilliseconds).ToString("#,##0"))
+Out-Message -Message ("Processing time {0} msec." -f ($sw.ElapsedMilliseconds).ToString("#,##0"))
 
