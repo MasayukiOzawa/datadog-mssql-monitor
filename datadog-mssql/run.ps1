@@ -123,10 +123,10 @@ function Send-DatadogMetrics() {
     [void]$da.Fill($dt)
         
     $body_detail = ""
-    $dd_tags = $conf.dd_tags
     $postTime = (Get-Date -Date ((Get-Date).ToUniversalTime()) -UFormat %s)
     
     foreach ($row in $dt.rows) {
+        $dd_tags = $conf.dd_tags
         if ($null -ne $row.dd_tags) {
             foreach ($dd_tag in ($row.dd_tags -split ",")) {
                 $dd_tags += (", ""{0}""" -f $dd_tag)
@@ -156,6 +156,7 @@ function Send-DatadogMetrics() {
     try {
         $postTime = (Get-Date -UFormat %s)
         $ret = Invoke-WebRequest -Uri $postURI -Method "Post" -Headers @{"Content-type" = "application/json" } -Body ($body_root -f $body_detail)
+        Write-Host ($body_root -f $body_detail)
         if ($ret.StatusCode -eq 202) {
             Out-Message -Message ("Metric [{0}] Send Success." -f $conf.metrics_name)
         }
